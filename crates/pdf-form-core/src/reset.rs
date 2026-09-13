@@ -212,11 +212,19 @@ fn plan_field(
     edits: &mut Vec<Edit>,
 ) -> Result<(), Error> {
     let refs = &form.field_ids[index];
-    let target = match mode {
+    let mut target = match mode {
         ResetMode::Default => refs.default_value.clone(),
         ResetMode::Clear => None,
     };
     let value_changes = !same_value(refs.current_value.as_ref(), target.as_ref());
+
+    // Leaving a field with no /V at all is only safe when it has no /DV to
+    // fall back on: readers treat a missing value as "use the default", so a
+    // field cleared by deletion would come back showing its default. Where one
+    // exists, say "empty" explicitly instead.
+    if target.is_none() && refs.default_value.is_some() {
+        target = empty_value(refs.kind);
+    }
 
     edits.push(Edit::Value {
         object: refs.value_owner,
@@ -264,6 +272,17 @@ fn plan_field(
         _ => {}
     }
     Ok(())
+}
+
+/// What "no value" is written as, per field type.
+fn empty_value(kind: FieldKind) -> Option<Object> {
+    match kind {
+        FieldKind::Radio | FieldKind::Checkbox => Some(Object::Name(b"Off".to_vec())),
+        FieldKind::Text | FieldKind::Combo | FieldKind::List => {
+            Some(Object::string_literal(""))
+        }
+        _ => None,
+    }
 }
 
 /// Values are compared as they display, so that a missing value and an empty

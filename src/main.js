@@ -40,6 +40,7 @@ const state = {
   path: null,
   model: null,
   pdf: null,
+  task: null,
   /** Field ids, in the order they were picked. */
   selected: [],
   fields: new Map(),
@@ -59,18 +60,18 @@ async function openFile(path, { keepScroll = false } = {}) {
       invoke("pdf_bytes", { path }),
     ]);
     // pdf.js takes ownership of the buffer it is handed, so give it a copy of
-    // its own rather than one we might read again later.
-    const pdf = await pdfjs.getDocument({
-      data: new Uint8Array(bytes),
-      ...pdfAssets,
-    }).promise;
+    // its own rather than one we might read again later. Teardown lives on the
+    // loading task, not the document, so keep hold of it.
+    const task = pdfjs.getDocument({ data: new Uint8Array(bytes), ...pdfAssets });
+    const pdf = await task.promise;
 
     if (generation !== state.generation) {
-      pdf.destroy();
+      await task.destroy();
       return;
     }
 
-    state.pdf?.destroy();
+    await state.task?.destroy();
+    state.task = task;
     state.path = path;
     state.model = model;
     state.pdf = pdf;

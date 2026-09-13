@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "app": "npm run sync-pdfjs && tauri dev",
-    "app:build": "tauri build"
+    "app:build": "tauri build",
+    "check": "node scripts/check-with-pdfjs.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

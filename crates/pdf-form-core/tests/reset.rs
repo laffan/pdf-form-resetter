@@ -191,7 +191,9 @@ fn the_previous_revision_stays_in_the_file_byte_for_byte() {
 fn clearing_a_text_field_empties_its_appearance_stream() {
     let after = clear(FIXTURE, &["fullname"]);
     let form = form_of(&after);
-    assert_eq!(field(&form, "fullname").value, None);
+    // Written as an explicit empty value, not as a missing one: this field has
+    // a /DV, and a reader seeing no /V would put that default back.
+    assert_eq!(field(&form, "fullname").value.as_deref(), Some(""));
     assert!(!field(&form, "fullname").has_value);
 
     // The old text must not still be painted by a stale appearance stream.
@@ -258,7 +260,8 @@ fn resetting_again_is_safe_and_keeps_the_file_readable() {
         field(&form, "fullname").value.as_deref(),
         Some("Ada Lovelace")
     );
-    assert_eq!(field(&form, "colour").value, None);
+    assert_eq!(field(&form, "colour").value.as_deref(), Some(""));
+    assert!(!field(&form, "colour").has_value);
     assert_eq!(field(&form, "agree").value.as_deref(), Some("Yes"));
     assert_eq!(&thrice[..once.len()], once.as_slice());
 }
@@ -343,7 +346,12 @@ fn clear_ignores_a_default_value() {
         .bytes;
     let radio = form_of(&after);
     let radio = field(&radio, "pick");
-    assert_eq!(radio.value, None, "/DV must not be put back by a clear");
+    assert_eq!(
+        radio.value.as_deref(),
+        Some("Off"),
+        "/DV must not be put back by a clear"
+    );
+    assert!(!radio.has_value);
     assert!(radio
         .widgets
         .iter()
