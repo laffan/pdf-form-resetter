@@ -162,6 +162,11 @@ pub(crate) enum AppearanceRef {
     InlineInApDict(ObjectId),
 }
 
+/// Read the form out of a PDF held in memory.
+pub fn read_form_bytes(bytes: &[u8]) -> Result<Form, Error> {
+    read_form(&Document::load_mem(bytes)?)
+}
+
 pub fn read_form(doc: &Document) -> Result<Form, Error> {
     let pages = doc.get_pages();
     let page_of = widget_pages(doc, &pages);

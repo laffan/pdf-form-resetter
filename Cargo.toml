@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/pdf-form-core"]
+members = ["crates/pdf-form-core", "src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
