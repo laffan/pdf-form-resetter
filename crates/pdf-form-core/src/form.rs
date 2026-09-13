@@ -89,6 +89,9 @@ pub struct Field {
     /// Fully qualified field name (`parent.child`), `""` when unnamed.
     pub name: String,
     pub kind: FieldKind,
+    /// Human-readable name for `kind`, so the UI does not keep its own copy of
+    /// the mapping.
+    pub kind_label: &'static str,
     /// Current value, rendered for display.
     pub value: Option<String>,
     /// Value a reset restores (the field's /DV), when it has one.
@@ -413,6 +416,7 @@ impl Walker<'_> {
             id: encode_id(id),
             name,
             kind,
+            kind_label: kind.label(),
             value: value.as_ref().map(display_value),
             default_value: state.default_value.as_ref().map(display_value),
             has_value,
