@@ -25,6 +25,15 @@ struct DocumentModel {
     fields: Vec<Field>,
 }
 
+/// A path given on the command line, so the app can be a handler for "Open
+/// with" as well as for its own file dialog.
+struct StartupPath(Option<String>);
+
+#[tauri::command]
+fn startup_path(path: tauri::State<'_, StartupPath>) -> Option<String> {
+    path.0.clone()
+}
+
 /// Read the form structure. Nothing is written and nothing is cached: the file
 /// on disk stays the single source of truth, so the window always shows what
 /// another program would see.
@@ -88,9 +97,19 @@ fn verify(path: &str) -> Result<PathBuf, String> {
 }
 
 fn main() {
+    let startup = std::env::args().nth(1).filter(|argument| {
+        !argument.starts_with('-') && Path::new(argument).extension().is_some()
+    });
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![open_pdf, pdf_bytes, reset_fields])
+        .manage(StartupPath(startup))
+        .invoke_handler(tauri::generate_handler![
+            open_pdf,
+            pdf_bytes,
+            reset_fields,
+            startup_path
+        ])
         .run(tauri::generate_context!())
         .expect("failed to start the app");
 }

@@ -336,6 +336,10 @@ window.addEventListener("resize", () => {
   resizeTimer = setTimeout(() => openFile(state.path, { keepScroll: true }), 150);
 });
 
+// A path handed to the binary (or by "Open with") opens straight away.
+const startup = await invoke("startup_path");
+if (startup) openFile(startup);
+
 getCurrentWebview().onDragDropEvent((event) => {
   if (event.payload.type !== "drop") return;
   const [path] = event.payload.paths ?? [];
