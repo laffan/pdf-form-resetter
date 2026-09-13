@@ -7,7 +7,7 @@ mod form;
 mod reset;
 
 pub use form::{decode_id, encode_id, read_form, Field, FieldKind, Form, Widget};
-pub use reset::{reset_bytes, reset_file, ResetOutput, ResetReport};
+pub use reset::{reset_bytes, reset_file, ResetMode, ResetOutput, ResetReport};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

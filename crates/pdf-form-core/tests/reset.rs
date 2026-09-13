@@ -4,7 +4,7 @@
 use std::collections::BTreeSet;
 
 use lopdf::{dictionary, Document, Object, ObjectId};
-use pdf_form_core::{decode_id, read_form, reset_bytes, Error, Field, FieldKind, Form};
+use pdf_form_core::{decode_id, read_form, reset_bytes, Error, Field, FieldKind, Form, ResetMode};
 
 const FIXTURE: &[u8] = include_bytes!("assets/filled_form.pdf");
 
@@ -28,9 +28,17 @@ fn id_of(form: &Form, name: &str) -> ObjectId {
 }
 
 fn reset(bytes: &[u8], field_names: &[&str]) -> Vec<u8> {
+    reset_with(bytes, field_names, ResetMode::Default).bytes
+}
+
+fn clear(bytes: &[u8], field_names: &[&str]) -> Vec<u8> {
+    reset_with(bytes, field_names, ResetMode::Clear).bytes
+}
+
+fn reset_with(bytes: &[u8], field_names: &[&str], mode: ResetMode) -> pdf_form_core::ResetOutput {
     let form = form_of(bytes);
     let ids: Vec<ObjectId> = field_names.iter().map(|name| id_of(&form, name)).collect();
-    reset_bytes(bytes.to_vec(), &ids).expect("reset").bytes
+    reset_bytes(bytes.to_vec(), &ids, mode).expect("reset")
 }
 
 /// Object ids whose contents differ between two revisions of a file.
@@ -73,9 +81,17 @@ fn reads_the_field_tree_of_a_third_party_form() {
         vec!["alpha", "beta", "gamma"]
     );
 
-    assert_eq!(field(&form, "fullname").value.as_deref(), Some("Ada Lovelace"));
     assert_eq!(field(&form, "colour").kind, FieldKind::Combo);
     assert_eq!(field(&form, "colour").value.as_deref(), Some("green"));
+
+    // reportlab writes /DV equal to the value the document ships with, so this
+    // field is filled but already at its default: a reset restores that text,
+    // and only a clear empties it.
+    let text = field(&form, "fullname");
+    assert_eq!(text.value.as_deref(), Some("Ada Lovelace"));
+    assert_eq!(text.default_value.as_deref(), Some("Ada Lovelace"));
+    assert!(text.has_value);
+    assert!(!text.is_set);
 }
 
 #[test]
@@ -124,26 +140,33 @@ fn resetting_a_radio_group_clears_the_value_and_every_button() {
 fn resetting_one_field_leaves_every_other_object_untouched() {
     let after = reset(FIXTURE, &["choice"]);
 
-    let before_form = form_of(FIXTURE);
-    let expected: BTreeSet<ObjectId> = std::iter::once(id_of(&before_form, "choice"))
+    let before = form_of(FIXTURE);
+    // The field itself, plus only the one button that was actually on: the
+    // two already showing /Off are left exactly as they were.
+    let expected: BTreeSet<ObjectId> = std::iter::once(id_of(&before, "choice"))
         .chain(
-            field(&before_form, "choice")
+            field(&before, "choice")
                 .widgets
                 .iter()
+                .filter(|w| w.appearance_state.as_deref() != Some("Off"))
                 .map(|w| decode_id(&w.id).unwrap()),
         )
         .collect();
+    assert_eq!(expected.len(), 2);
 
     assert_eq!(
         changed_objects(FIXTURE, &after),
         expected,
-        "only the radio group's own field and widget objects may change"
+        "only the radio group's own field and the button that was on may change"
     );
 
     // Spot-check the neighbours through the public model too.
     let form = form_of(&after);
     assert_eq!(field(&form, "agree").value.as_deref(), Some("Yes"));
-    assert_eq!(field(&form, "fullname").value.as_deref(), Some("Ada Lovelace"));
+    assert_eq!(
+        field(&form, "fullname").value.as_deref(),
+        Some("Ada Lovelace")
+    );
     assert_eq!(field(&form, "confirm").value.as_deref(), Some("no"));
 }
 
@@ -165,10 +188,11 @@ fn the_previous_revision_stays_in_the_file_byte_for_byte() {
 }
 
 #[test]
-fn resetting_a_text_field_empties_its_appearance_stream() {
-    let after = reset(FIXTURE, &["fullname"]);
+fn clearing_a_text_field_empties_its_appearance_stream() {
+    let after = clear(FIXTURE, &["fullname"]);
     let form = form_of(&after);
     assert_eq!(field(&form, "fullname").value, None);
+    assert!(!field(&form, "fullname").has_value);
 
     // The old text must not still be painted by a stale appearance stream.
     let doc = Document::load_mem(&after).expect("parse");
@@ -193,24 +217,48 @@ fn resetting_a_text_field_empties_its_appearance_stream() {
 }
 
 #[test]
+fn resetting_a_text_field_restores_the_value_the_document_calls_default() {
+    // Not a blank: /DV is what a form's own reset button puts back.
+    let out = reset_with(FIXTURE, &["fullname"], ResetMode::Default);
+    assert_eq!(out.report.objects_changed, 0, "already at its default");
+    assert_eq!(out.bytes, FIXTURE, "a no-op must not touch the file");
+
+    let typed_over = clear(FIXTURE, &["fullname"]);
+    let restored = reset(&typed_over, &["fullname"]);
+    let form = form_of(&restored);
+    assert_eq!(
+        field(&form, "fullname").value.as_deref(),
+        Some("Ada Lovelace")
+    );
+    assert!(form.need_appearances, "the viewer has to redraw the text");
+}
+
+#[test]
 fn several_fields_can_be_reset_in_one_write() {
     let after = reset(FIXTURE, &["choice", "agree", "confirm"]);
     let form = form_of(&after);
     assert_eq!(field(&form, "choice").value, None);
     assert_eq!(field(&form, "agree").value, None);
     assert_eq!(field(&form, "confirm").value, None);
-    assert_eq!(field(&form, "fullname").value.as_deref(), Some("Ada Lovelace"));
+    assert_eq!(
+        field(&form, "fullname").value.as_deref(),
+        Some("Ada Lovelace")
+    );
 }
 
 #[test]
 fn resetting_again_is_safe_and_keeps_the_file_readable() {
     let once = reset(FIXTURE, &["choice"]);
     let twice = reset(&once, &["choice"]);
-    let thrice = reset(&twice, &["fullname"]);
+    let thrice = clear(&twice, &["colour"]);
 
     let form = form_of(&thrice);
     assert_eq!(field(&form, "choice").value, None);
-    assert_eq!(field(&form, "fullname").value, None);
+    assert_eq!(
+        field(&form, "fullname").value.as_deref(),
+        Some("Ada Lovelace")
+    );
+    assert_eq!(field(&form, "colour").value, None);
     assert_eq!(field(&form, "agree").value.as_deref(), Some("Yes"));
     assert_eq!(&thrice[..once.len()], once.as_slice());
 }
@@ -224,13 +272,18 @@ fn a_push_button_is_refused_rather_than_mangled() {
     assert!(!button.resettable);
     assert!(!button.is_set);
 
-    let error = reset_bytes(bytes.clone(), &[decode_id(&button.id).unwrap()]).unwrap_err();
+    let error = reset_bytes(
+        bytes.clone(),
+        &[decode_id(&button.id).unwrap()],
+        ResetMode::Default,
+    )
+    .unwrap_err();
     assert!(matches!(error, Error::NotResettable { .. }), "{error}");
 }
 
 #[test]
 fn an_unknown_field_id_is_an_error_and_writes_nothing() {
-    let error = reset_bytes(FIXTURE.to_vec(), &[(9999, 0)]).unwrap_err();
+    let error = reset_bytes(FIXTURE.to_vec(), &[(9999, 0)], ResetMode::Default).unwrap_err();
     assert!(matches!(error, Error::UnknownField(_)), "{error}");
 }
 
@@ -240,7 +293,7 @@ fn a_default_value_is_restored_instead_of_cleared() {
     let form = form_of(&bytes);
 
     // Radio group whose /DV names the second button.
-    let after = reset_bytes(bytes.clone(), &[id_of(&form, "pick")])
+    let after = reset_bytes(bytes.clone(), &[id_of(&form, "pick")], ResetMode::Default)
         .expect("reset")
         .bytes;
     let after_form = form_of(&after);
@@ -257,7 +310,12 @@ fn a_default_value_is_restored_instead_of_cleared() {
     );
 
     // Text field with a default: the viewer is asked to redraw it.
-    let out = reset_bytes(bytes, &[id_of(&form, "greeting")]).expect("reset");
+    let out = reset_bytes(
+        bytes.clone(),
+        &[id_of(&form, "greeting")],
+        ResetMode::Default,
+    )
+    .expect("reset");
     assert!(out.report.need_appearances_set);
     let text = form_of(&out.bytes);
     assert_eq!(field(&text, "greeting").value.as_deref(), Some("hello"));
@@ -265,13 +323,31 @@ fn a_default_value_is_restored_instead_of_cleared() {
 }
 
 #[test]
-fn a_field_that_is_already_clear_reports_nothing_to_do() {
+fn a_field_that_is_already_clear_leaves_the_file_alone() {
     let after = reset(FIXTURE, &["choice"]);
-    let form = form_of(&after);
-    assert!(!field(&form, "choice").is_set);
-    // Resetting it again is allowed, it simply has no effect on the value.
-    let again = reset(&after, &["choice"]);
-    assert_eq!(form_of(&again).fields.len(), form.fields.len());
+    assert!(!field(&form_of(&after), "choice").is_set);
+
+    let again = reset_with(&after, &["choice"], ResetMode::Default);
+    assert_eq!(again.report.objects_changed, 0);
+    assert_eq!(again.report.bytes_appended, 0);
+    assert_eq!(again.bytes, after, "a second reset must not grow the file");
+}
+
+#[test]
+fn clear_ignores_a_default_value() {
+    let bytes = synthetic_form();
+    let form = form_of(&bytes);
+
+    let after = reset_bytes(bytes, &[id_of(&form, "pick")], ResetMode::Clear)
+        .expect("clear")
+        .bytes;
+    let radio = form_of(&after);
+    let radio = field(&radio, "pick");
+    assert_eq!(radio.value, None, "/DV must not be put back by a clear");
+    assert!(radio
+        .widgets
+        .iter()
+        .all(|w| w.appearance_state.as_deref() == Some("Off")));
 }
 
 /// A small form built by hand, for the shapes reportlab will not produce:

@@ -50,7 +50,10 @@ impl FieldKind {
     }
 
     fn is_button(self) -> bool {
-        matches!(self, FieldKind::Radio | FieldKind::Checkbox | FieldKind::PushButton)
+        matches!(
+            self,
+            FieldKind::Radio | FieldKind::Checkbox | FieldKind::PushButton
+        )
     }
 }
 
@@ -90,7 +93,11 @@ pub struct Field {
     pub value: Option<String>,
     /// Value a reset restores (the field's /DV), when it has one.
     pub default_value: Option<String>,
-    /// True when a reset would change something.
+    /// True when the field currently holds a value — what the UI highlights,
+    /// and what you would want to clear.
+    pub has_value: bool,
+    /// True when a reset to the default would change something. A field whose
+    /// /DV equals its current value is filled but not "set".
     pub is_set: bool,
     /// False for fields this tool refuses to touch (push buttons hold no
     /// value; signatures carry bytes a reset cannot honestly rewrite).
@@ -132,6 +139,7 @@ pub(crate) struct FieldRefs {
     /// Object that actually carries /V (the field, or an ancestor).
     pub(crate) value_owner: ObjectId,
     pub(crate) kind: FieldKind,
+    pub(crate) current_value: Option<Object>,
     pub(crate) default_value: Option<Object>,
     pub(crate) widgets: Vec<WidgetRefs>,
 }
@@ -164,7 +172,9 @@ pub fn read_form(doc: &Document) -> Result<Form, Error> {
         .map_err(|_| Error::NoCatalog)?
         .as_reference()
         .map_err(|_| Error::NoCatalog)?;
-    let catalog = doc.get_dictionary(catalog_id).map_err(|_| Error::NoCatalog)?;
+    let catalog = doc
+        .get_dictionary(catalog_id)
+        .map_err(|_| Error::NoCatalog)?;
 
     let (acro, location) = match catalog.get(b"AcroForm") {
         Ok(Object::Reference(id)) => (
@@ -320,7 +330,10 @@ impl Walker<'_> {
     fn split_kids(&self, dict: &Dictionary) -> (Vec<ObjectId>, Vec<ObjectId>) {
         let mut fields = Vec::new();
         let mut widgets = Vec::new();
-        let Ok(kids) = dict.get(b"Kids").and_then(|o| deref(self.doc, o)?.as_array()) else {
+        let Ok(kids) = dict
+            .get(b"Kids")
+            .and_then(|o| deref(self.doc, o)?.as_array())
+        else {
             return (fields, widgets);
         };
         for kid in kids {
@@ -360,7 +373,9 @@ impl Walker<'_> {
                 id: encode_id(widget_id),
                 page_index: self.page_of.get(&widget_id).copied(),
                 rect: rect_of(self.doc, widget),
-                on_state: on_state.as_ref().map(|s| String::from_utf8_lossy(s).into_owned()),
+                on_state: on_state
+                    .as_ref()
+                    .map(|s| String::from_utf8_lossy(s).into_owned()),
                 appearance_state,
             });
             widget_refs.push(WidgetRefs {
@@ -380,12 +395,14 @@ impl Walker<'_> {
         };
 
         let is_set = resettable
-            && differs_from_reset(
-                value.as_ref(),
-                state.default_value.as_ref(),
-                kind,
-                &widgets,
-            );
+            && differs_from_reset(value.as_ref(), state.default_value.as_ref(), kind, &widgets);
+        let has_value = resettable
+            && (value.as_ref().is_some_and(|v| !is_empty_value(v))
+                || widgets.iter().any(|w| {
+                    w.appearance_state
+                        .as_ref()
+                        .is_some_and(|state| state != "Off")
+                }));
 
         self.fields.push(Field {
             id: encode_id(id),
@@ -393,6 +410,7 @@ impl Walker<'_> {
             kind,
             value: value.as_ref().map(display_value),
             default_value: state.default_value.as_ref().map(display_value),
+            has_value,
             is_set,
             resettable,
             note,
@@ -404,6 +422,7 @@ impl Walker<'_> {
             field: id,
             value_owner,
             kind,
+            current_value: value,
             default_value: state.default_value.clone(),
             widgets: widget_refs,
         });
@@ -411,7 +430,10 @@ impl Walker<'_> {
 
     /// The /AP /N key that is not /Off — the export value of this button.
     fn on_state(&self, widget: &Dictionary) -> Option<Vec<u8>> {
-        let ap = widget.get(b"AP").ok().and_then(|o| deref(self.doc, o).ok())?;
+        let ap = widget
+            .get(b"AP")
+            .ok()
+            .and_then(|o| deref(self.doc, o).ok())?;
         let normal = ap.as_dict().ok()?.get(b"N").ok()?;
         let states = deref(self.doc, normal).ok()?.as_dict().ok()?;
         states
@@ -485,13 +507,19 @@ fn differs_from_reset(
             (Some(v), None) => display_value(v),
             (None, None) => "Off".to_string(),
         };
-        let target = if target.is_empty() { "Off".to_string() } else { target };
-        return widgets.iter().any(|w| match (&w.appearance_state, &w.on_state) {
-            // A widget is stale when it shows "on" but is not the chosen one.
-            (Some(state), Some(on)) => state == on && *state != target,
-            (Some(state), None) => state.as_str() != "Off" && *state != target,
-            _ => false,
-        });
+        let target = if target.is_empty() {
+            "Off".to_string()
+        } else {
+            target
+        };
+        return widgets
+            .iter()
+            .any(|w| match (&w.appearance_state, &w.on_state) {
+                // A widget is stale when it shows "on" but is not the chosen one.
+                (Some(state), Some(on)) => state == on && *state != target,
+                (Some(state), None) => state.as_str() != "Off" && *state != target,
+                _ => false,
+            });
     }
     false
 }
