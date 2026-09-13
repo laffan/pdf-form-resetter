@@ -1,0 +1,11 @@
+[package]
+name = "pdf-form-core"
+description = "Read an AcroForm's field tree and reset individual fields via an incremental PDF update."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+lopdf = "0.45"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"

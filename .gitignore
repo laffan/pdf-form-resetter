@@ -1,0 +1,15 @@
+# Rust
+/target
+/src-tauri/target
+/src-tauri/gen/schemas
+
+# Node
+node_modules
+dist
+
+# Editors / OS
+.DS_Store
+*.swp
+
+# Working files written next to a PDF while it is being updated
+*.reset-tmp
