@@ -1,0 +1,225 @@
+:root {
+  --bg: #14161a;
+  --bar: #1b1e24;
+  --line: #2c313a;
+  --text: #e7e9ee;
+  --dim: #949aa6;
+  --accent: #6ea8fe;
+  --filled: #f0a94a;
+  --danger: #e05c5c;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  overflow: hidden;
+}
+
+/* ---- top bar ---- */
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--bar);
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+
+.doc {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta,
+.status {
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status {
+  margin-left: auto;
+  padding-left: 12px;
+}
+
+.status.error {
+  color: var(--danger);
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: #262b33;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: #2f3540;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+button.primary {
+  background: #2b3440;
+  border-color: #3b4654;
+}
+
+/* ---- pages ---- */
+
+#viewer {
+  flex: 1;
+  overflow: auto;
+  padding: 20px 0 96px;
+  outline: none;
+}
+
+.placeholder {
+  color: var(--dim);
+  text-align: center;
+  margin-top: 22vh;
+}
+
+.page {
+  position: relative;
+  margin: 0 auto 20px;
+  background: #fff;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
+}
+
+.page canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+}
+
+/* ---- field overlays ---- */
+
+.widget {
+  position: absolute;
+  padding: 0;
+  border-radius: 2px;
+  background: rgba(110, 168, 254, 0.13);
+  border: 1px solid rgba(110, 168, 254, 0.55);
+  cursor: pointer;
+  transition: background 90ms linear, border-color 90ms linear;
+}
+
+.widget:hover {
+  background: rgba(110, 168, 254, 0.28);
+}
+
+/* A field that currently holds a value: the thing you are likely here to clear. */
+.widget.filled {
+  background: rgba(240, 169, 74, 0.18);
+  border-color: rgba(240, 169, 74, 0.75);
+}
+
+.widget.filled:hover {
+  background: rgba(240, 169, 74, 0.32);
+}
+
+.widget.selected,
+.widget.selected.filled {
+  background: rgba(110, 168, 254, 0.32);
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 2px rgba(110, 168, 254, 0.3);
+}
+
+/* Push buttons and signatures: shown so the page reads correctly, not clickable. */
+.widget.inert {
+  background: transparent;
+  border: 1px dashed rgba(148, 154, 166, 0.5);
+  cursor: default;
+}
+
+/* ---- selection panel ---- */
+
+.selection {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  max-width: min(760px, calc(100vw - 32px));
+  padding: 10px 12px 10px 16px;
+  background: var(--bar);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+}
+
+.about {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.selection-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.selection-detail {
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+.reset {
+  background: #7a3b3b;
+  border-color: #954a4a;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.reset:hover:not(:disabled) {
+  background: #8d4444;
+}

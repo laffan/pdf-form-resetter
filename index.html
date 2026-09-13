@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDF Form Resetter</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <button id="open" class="primary">Open PDF…</button>
+      <div class="doc">
+        <span id="doc-name" class="name"></span>
+        <span id="doc-meta" class="meta"></span>
+      </div>
+      <span id="status" class="status" role="status" aria-live="polite"></span>
+    </header>
+
+    <main id="viewer" tabindex="-1">
+      <p id="placeholder" class="placeholder">
+        Open a PDF, or drop one on this window.
+      </p>
+    </main>
+
+    <div id="selection" class="selection" hidden>
+      <div class="about">
+        <span id="selection-name" class="selection-name"></span>
+        <span id="selection-detail" class="selection-detail"></span>
+      </div>
+      <div class="actions">
+        <button id="reset" class="reset">RESET</button>
+        <button id="clear" class="secondary" hidden>CLEAR</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
